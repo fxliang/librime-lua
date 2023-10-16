@@ -23,9 +23,9 @@ static void lua_init(lua_State *L) {
   types_init(L);
   lua_getglobal(L, "package");
   lua_pushfstring(L, "%s%slua%s?.lua;"
-                  "%s%slua%s?%sinit.lua;"
+                  "%s%slua%s?%s?.lua;"
                   "%s%slua%s?.lua;"
-                  "%s%slua%s?%sinit.lua;",
+                  "%s%slua%s?%s?.lua;",
                   user_dir.c_str(), LUA_DIRSEP, LUA_DIRSEP,
                   user_dir.c_str(), LUA_DIRSEP, LUA_DIRSEP, LUA_DIRSEP,
                   shared_dir.c_str(), LUA_DIRSEP, LUA_DIRSEP,
