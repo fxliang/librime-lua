@@ -18,6 +18,9 @@
 #include "lua_gears.h"
 #include <rime/service.h>
 #include <boost/regex.hpp>
+#ifdef _WIN32
+#include <Windows.h>
+#endif
 
 #include "lib/lua_export_type.h"
 #include "optional.h"
@@ -1816,6 +1819,94 @@ namespace SwitcherReg {
   };
 }
 
+#ifdef _WIN32
+namespace WinClipboard {
+  inline std::string wstring_to_string(const std::wstring& wstr,
+      int code_page = CP_ACP) {
+    // support CP_ACP and CP_UTF8 only
+    if (code_page != 0 && code_page != CP_UTF8)
+      return "";
+    int len = WideCharToMultiByte(code_page, 0, wstr.c_str(), (int)wstr.size(),
+        NULL, 0, NULL, NULL);
+    if (len <= 0)
+      return "";
+    std::string res;
+    char* buffer = new char[len + 1];
+    WideCharToMultiByte(code_page, 0, wstr.c_str(), (int)wstr.size(), buffer, len,
+        NULL, NULL);
+    buffer[len] = '\0';
+    res.append(buffer);
+    delete[] buffer;
+    return res;
+  }
+
+  inline std::wstring string_to_wstring(const std::string& str,
+      int code_page = CP_ACP) {
+    // support CP_ACP and CP_UTF8 only
+    if (code_page != 0 && code_page != CP_UTF8)
+      return L"";
+    // calc len
+    int len =
+      MultiByteToWideChar(code_page, 0, str.c_str(), (int)str.size(), NULL, 0);
+    if (len <= 0)
+      return L"";
+    std::wstring res;
+    WCHAR* buffer = new WCHAR[len + 1];
+    MultiByteToWideChar(code_page, 0, str.c_str(), (int)str.size(), buffer, len);
+    buffer[len] = '\0';
+    res.append(buffer);
+    delete[] buffer;
+    return res;
+  }
+
+  std::string GetLastClipboardText() {
+    if (!OpenClipboard(nullptr)) {
+      return "";
+    }
+    UINT format = 0;
+    int count = 0;
+    while ((format = EnumClipboardFormats(format)) != 0) {
+      count++;
+    }
+    format = 0;
+    UINT lastFormat = 0;
+    while ((format = EnumClipboardFormats(format)) != 0) {
+      if (format == CF_UNICODETEXT || format == CF_TEXT) {
+        lastFormat = format;
+      }
+    }
+    HANDLE hData = GetClipboardData(lastFormat);
+    if (hData != nullptr) {
+      LPCVOID pData = GlobalLock(hData);
+      if (pData != nullptr) {
+        std::wstring text;
+        if (lastFormat == CF_UNICODETEXT) {
+          text = reinterpret_cast<const wchar_t*>(pData);
+        } else {
+          std::string str(reinterpret_cast<const char*>(pData));
+          text = string_to_wstring(str, CP_ACP);
+        }
+        GlobalUnlock(hData);
+        CloseClipboard();
+        return wstring_to_string(text, CP_UTF8);
+      }
+    }
+    CloseClipboard();
+    return "";
+  }
+
+  static const luaL_Reg funcs[] = {
+    {"get_last_clipboard_text", WRAP(GetLastClipboardText)},
+    {NULL, NULL},
+  };
+
+  void init(lua_State* L) {
+    lua_createtable(L, 0, 0);
+    luaL_setfuncs(L, funcs, 0);
+    lua_setglobal(L, "WinClipboard");
+  }
+}  // namespace WinClipboard
+#endif
 }
 
 void types_ext_init(lua_State *L);
@@ -1854,6 +1945,9 @@ void types_init(lua_State *L) {
   EXPORT(PhraseReg, L);
   EXPORT(KeySequenceReg, L);
   EXPORT(SwitcherReg, L);
+#ifdef _WIN32
+  WinClipboard::init(L);
+#endif
   LogReg::init(L);
   RimeApiReg::init(L);
 #ifdef ENABLE_TYPES_EXT
