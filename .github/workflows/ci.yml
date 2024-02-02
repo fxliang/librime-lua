@@ -5,5 +5,6 @@ jobs:
   windows:
     uses: fxliang/librime/.github/workflows/windows-build.yml@acp_resource_id
     with:
-      repository: fxliang/librime@acp_resource_id
+      repository: fxliang/librime
+      ref: 'acp_resource_id'
       rime_plugins: ${{ github.repository }}@${{ github.ref_name }} lotem/librime-octagram rime/librime-predict
