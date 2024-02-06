@@ -262,7 +262,7 @@ namespace ReverseDbReg {
   using T = ReverseDb;
 
   an<T> make(const string &file) {
-    an<T> db = New<ReverseDb>(string(RimeGetUserDataDir()) +  "/" + file);
+    an<T> db = New<ReverseDb>(path(string(RimeGetUserDataDir())) / path(file));
     db->Load();
     return db;
   }

@@ -273,6 +273,10 @@ namespace UserDbReg{
     return t.Update(key, value);
   }
 
+  std::string file_name(T &t) {
+    return  t.file_path().u8string();
+  }
+
   an<A> Query(T &t, const string& key) { return t.Query(key); }
   
   static const luaL_Reg funcs[] = {
@@ -302,7 +306,7 @@ namespace UserDbReg{
     {"read_only",WRAPMEM(T, readonly)},
     {"disabled",WRAPMEM(T, disabled)},
     {"name", WRAPMEM(T, name)},
-    {"file_name", WRAPMEM(T, file_name)},
+    {"file_name", WRAP(file_name)},
     { NULL, NULL },
   };
 
