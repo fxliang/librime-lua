@@ -1488,12 +1488,15 @@ namespace ConnectionReg {
 namespace NotifierReg {
   typedef Context::Notifier T;
 
+  void notify(T &n, Context *ctx) { n(ctx); }
+
   static const luaL_Reg funcs[] = {
     { NULL, NULL },
   };
 
   static const luaL_Reg methods[] = {
     { "connect", raw_connect<T, Context *>},
+    { "notify", WRAP(notify)},
     { NULL, NULL },
   };
 

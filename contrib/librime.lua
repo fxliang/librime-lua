@@ -636,6 +636,7 @@ Component = {}
 
 ---@class Notifier
 ---@field connect fun(self: self, f: fun(ctx: Context), group: integer|nil): Connection
+---@field notify fun(self: self, ctx: Context)
 
 ---@class OptionUpdateNotifier: Notifier
 ---@field connect fun(self: self, f: fun(ctx: Context, name: string), group:integer|nil): function[]
