@@ -640,12 +640,15 @@ Component = {}
 
 ---@class OptionUpdateNotifier: Notifier
 ---@field connect fun(self: self, f: fun(ctx: Context, name: string), group:integer|nil): function[]
+---@field notify fun(self: self, ctx: Context, name: string)
 
 ---@class PropertyUpdateNotifier: Notifier
 ---@field connect fun(self: self, f: fun(ctx: Context, name: string), group:integer|nil): function[]
+---@field notify fun(self: self, ctx: Context, name: string)
 
 ---@class KeyEventNotifier: Notifier
 ---@field connect fun(self: self, f: fun(ctx: Context, key: string), group:integer|nil): function[]
+---@field notify fun(self: self, ctx: Context, key: string)
 
 ---@class Connection
 ---@field disconnect fun(self: self)
