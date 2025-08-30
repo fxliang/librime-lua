@@ -1495,8 +1495,16 @@ static int raw_connect(lua_State *L) {
   return 1;
 }
 
-template<typename T, typename ... I>
-static void notify(T& t, I... i) { t(i...); }
+template <typename T, typename C, typename... I>
+static void notify(T& t, C c, I... i) {
+  if (reinterpret_cast<void*>(&t) ==
+          reinterpret_cast<void*>(&c->select_notifier()) &&
+      c->composition().empty()) {
+    LOG(ERROR) << "notify of select error error : segments is empty";
+    return;
+  }
+  t(c, i...);
+}
 
 namespace ConnectionReg {
   using T = boost::signals2::connection;
