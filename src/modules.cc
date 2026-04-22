@@ -1,10 +1,9 @@
 #include <cstdio>
 #include <rime/common.h>
 #include <rime/registry.h>
-#include <rime_api.h>
-#include <rime/service.h>
 #include "lib/lua_templates.h"
 #include "lua_gears.h"
+#include "path_compat.h"
 
 void types_init(lua_State *L);
 
@@ -17,39 +16,10 @@ static bool file_exists(const char *fname) noexcept {
     return false;
 }
 
-namespace {
-template<typename> using void_t = void;
-
-template<typename T, typename = void>
-struct COMPAT {
-  static std::string get_shared_data_dir() {
-    return std::string(rime_get_api()->get_shared_data_dir());
-  }
-
-  static std::string get_user_data_dir() {
-    return std::string(rime_get_api()->get_user_data_dir());
-  }
-};
-
-template<typename T>
-struct COMPAT<T, void_t<decltype(std::declval<T>().user_data_dir.string())>> {
-  static std::string get_shared_data_dir() {
-    // path::string() returns native encoding on Windows
-    T &deployer = rime::Service::instance().deployer();
-    return deployer.shared_data_dir.string();
-  }
-
-  static std::string get_user_data_dir() {
-    T &deployer = rime::Service::instance().deployer();
-    return deployer.user_data_dir.string();
-  }
-};
-}
-
 static void lua_init(lua_State *L) {
 
-  const auto user_dir = COMPAT<rime::Deployer>::get_user_data_dir();
-  const auto shared_dir = COMPAT<rime::Deployer>::get_shared_data_dir();
+  const auto user_dir = rime::lua_path_compat::GetUserDataDir();
+  const auto shared_dir = rime::lua_path_compat::GetSharedDataDir();
 
   types_init(L);
   lua_getglobal(L, "package");
