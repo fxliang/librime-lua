@@ -16,6 +16,12 @@
 #include <rime/gear/memory.h>
 #include <rime/dict/dictionary.h>
 #include <rime/dict/user_dictionary.h>
+#if __has_include(<rime/namespace_resource_utils.h>)
+#include <rime/namespace_resource_utils.h>
+#define RIME_HAS_NAMESPACE_RESOURCE_UTILS 1
+#else
+#define RIME_HAS_NAMESPACE_RESOURCE_UTILS 0
+#endif
 #include <rime/service.h>
 #include <rime/switcher.h>
 #include "lua_gears.h"
@@ -2502,6 +2508,83 @@ namespace KeySequenceReg {
 }// KeySequence a vector of Keyevent
 
 namespace RimeApiReg {
+  optional<string> resolve_schema_file(const string& schema_id,
+                                       const string& file_name) {
+    if (file_name.empty()) {
+      return {};
+    }
+    auto file_path = path(file_name);
+    if (file_path.is_absolute()) {
+      if (std::filesystem::exists(file_path)) {
+        return file_path.string();
+      }
+      return {};
+    }
+
+#if RIME_HAS_NAMESPACE_RESOURCE_UTILS
+    Schema schema(schema_id);
+    auto* config = schema.config();
+    const bool namespace_only = NamespaceResourcesOnlyFromConfig(config);
+    const auto candidates = BuildSchemaScopedResourceCandidates(
+        file_name, schema_id, config, namespace_only,
+        /*allow_default_namespace_fallback=*/true,
+        /*allow_parent_path_namespace_candidates=*/true);
+    the<ResourceResolver> resolver(
+        Service::instance().CreateResourceResolver({"source_file", "", ""}));
+    auto resolved = ResolveFirstExistingResourcePath(candidates, resolver.get());
+    if (!resolved) {
+      return {};
+    }
+    return resolved->string();
+#else
+    auto fallback = COMPAT<Deployer>::resolve_existing_path(file_name);
+    if (std::filesystem::exists(path(fallback))) {
+      return fallback;
+    }
+    return {};
+#endif
+  }
+
+  int raw_resolve_schema_file(lua_State* L) {
+    const int argc = lua_gettop(L);
+    string schema_id;
+    string file_name;
+    if (argc == 1) {
+      if (!lua_isstring(L, 1)) {
+        return 0;
+      }
+      file_name = lua_tostring(L, 1);
+      lua_getglobal(L, "rime_api");
+      if (lua_istable(L, -1)) {
+        lua_getfield(L, -1, "_current_schema_id");
+        if (lua_isstring(L, -1)) {
+          schema_id = lua_tostring(L, -1);
+        }
+        lua_pop(L, 1);
+      }
+      lua_pop(L, 1);
+    } else if (argc >= 2) {
+      if (!lua_isstring(L, 2)) {
+        return 0;
+      }
+      file_name = lua_tostring(L, 2);
+      if (lua_isstring(L, 1)) {
+        schema_id = lua_tostring(L, 1);
+      }
+    } else {
+      return 0;
+    }
+    if (file_name.empty()) {
+      return 0;
+    }
+    auto resolved = resolve_schema_file(schema_id, file_name);
+    if (!resolved) {
+      return 0;
+    }
+    lua_pushstring(L, resolved->c_str());
+    return 1;
+  }
+
   string get_rime_version() {
     return string(rime_get_api()->get_version());
   }
@@ -2566,6 +2649,7 @@ namespace RimeApiReg {
     { "get_distribution_version", WRAP(get_distribution_version) },
     { "get_user_id", WRAP(get_user_id) },
     { "get_time_ms", WRAP(get_time_ms) },
+    { "resolve_schema_file", raw_resolve_schema_file },
     { "regex_match", WRAP(regex_match) },
     { "regex_search", WRAP(regex_search) },
     { "regex_replace", WRAP(regex_replace) },

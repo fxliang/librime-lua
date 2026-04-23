@@ -292,6 +292,12 @@ static void raw_init(lua_State *L, const Ticket &t,
     set_package_path(L, namespace_path_prefix + package_path_fallback);
   }
   load_namespace_rime_lua(L, schema_namespace);
+  lua_getglobal(L, "rime_api");
+  if (lua_istable(L, -1) && t.schema) {
+    lua_pushstring(L, t.schema->schema_id().c_str());
+    lua_setfield(L, -2, "_current_schema_id");
+  }
+  lua_pop(L, 1);
 
   lua_newtable(L);
   Engine *e = t.engine;
