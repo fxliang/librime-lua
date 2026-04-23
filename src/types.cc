@@ -20,7 +20,9 @@
 #include <rime/switcher.h>
 #include "lua_gears.h"
 #include <boost/regex.hpp>
+#include <algorithm>
 #include <chrono>
+#include <filesystem>
 
 #include "lib/lua_export_type.h"
 #include "optional.h"
@@ -49,9 +51,82 @@ struct HighlightDispatcher<T, void_t<decltype(std::declval<T>().Highlight(std::d
 
 template<typename T, typename = void>
 struct COMPAT {
+  static path resolve_under_root(const path& root, const path& relative_file) {
+    if (root.empty()) {
+      return path();
+    }
+    auto direct = root / relative_file;
+    if (std::filesystem::exists(direct)) {
+      return direct;
+    }
+    vector<path> namespace_dirs;
+    for (const auto& entry : std::filesystem::directory_iterator(root)) {
+      if (entry.is_directory()) {
+        namespace_dirs.push_back(entry.path());
+      }
+    }
+    std::sort(namespace_dirs.begin(), namespace_dirs.end());
+    for (const auto& ns_dir : namespace_dirs) {
+      auto candidate = ns_dir / relative_file;
+      if (std::filesystem::exists(candidate)) {
+        return candidate;
+      }
+      if (relative_file.has_parent_path()) {
+        auto prefixed_candidate = relative_file.parent_path() /
+                                  ns_dir.filename() /
+                                  relative_file.filename();
+        auto prefixed_path = root / prefixed_candidate;
+        if (std::filesystem::exists(prefixed_path)) {
+          return prefixed_path;
+        }
+      }
+    }
+    return path();
+  }
+
+  static string resolve_existing_path(const std::string& file) {
+    auto file_path = path(file);
+    auto user_root = path(rime_get_api()->get_user_data_dir());
+    auto shared_root = path(rime_get_api()->get_shared_data_dir());
+    if (file_path.is_absolute()) {
+      if (std::filesystem::exists(file_path)) {
+        return file;
+      }
+      const vector<path> roots = {user_root, shared_root};
+      for (const auto& root : roots) {
+        if (root.empty()) {
+          continue;
+        }
+        auto relative_file =
+            std::filesystem::absolute(file_path).lexically_relative(
+                std::filesystem::absolute(root));
+        if (relative_file.empty()) {
+          continue;
+        }
+        auto relative_file_text = relative_file.generic_u8string();
+        if (relative_file_text == ".." ||
+            relative_file_text.rfind("../", 0) == 0) {
+          continue;
+        }
+        if (auto resolved = resolve_under_root(root, relative_file);
+            !resolved.empty()) {
+          return resolved.string();
+        }
+      }
+      return file;
+    }
+    if (auto resolved = resolve_under_root(user_root, file_path); !resolved.empty()) {
+      return resolved.string();
+    }
+    if (auto resolved = resolve_under_root(shared_root, file_path); !resolved.empty()) {
+      return resolved.string();
+    }
+    return (user_root / file_path).string();
+  }
+
   // fallback version if librime is old
   static an<ReverseDb> new_ReverseDb(const std::string &file) {
-    return New<ReverseDb>(string(rime_get_api()->get_user_data_dir()) + "/" + file);
+    return New<ReverseDb>(resolve_existing_path(file));
   }
 
   static string get_shared_data_dir() {
@@ -73,9 +148,83 @@ struct COMPAT {
 
 template<typename T>
 struct COMPAT<T, void_t<decltype(std::declval<T>().user_data_dir.string())>> {
-  static an<ReverseDb> new_ReverseDb(const std::string &file) {
+  static path resolve_under_root(const path& root, const path& relative_file) {
+    if (root.empty()) {
+      return path();
+    }
+    auto direct = root / relative_file;
+    if (std::filesystem::exists(direct)) {
+      return direct;
+    }
+    vector<path> namespace_dirs;
+    for (const auto& entry : std::filesystem::directory_iterator(root)) {
+      if (entry.is_directory()) {
+        namespace_dirs.push_back(entry.path());
+      }
+    }
+    std::sort(namespace_dirs.begin(), namespace_dirs.end());
+    for (const auto& ns_dir : namespace_dirs) {
+      auto candidate = ns_dir / relative_file;
+      if (std::filesystem::exists(candidate)) {
+        return candidate;
+      }
+      if (relative_file.has_parent_path()) {
+        auto prefixed_candidate = relative_file.parent_path() /
+                                  ns_dir.filename() /
+                                  relative_file.filename();
+        auto prefixed_path = root / prefixed_candidate;
+        if (std::filesystem::exists(prefixed_path)) {
+          return prefixed_path;
+        }
+      }
+    }
+    return path();
+  }
+
+  static path resolve_existing_path(const std::string &file) {
+    auto file_path = path(file);
     T &deployer = Service::instance().deployer();
-    return New<ReverseDb>(deployer.user_data_dir / file);
+    if (file_path.is_absolute()) {
+      if (std::filesystem::exists(file_path)) {
+        return file_path;
+      }
+      const vector<path> roots = {deployer.user_data_dir,
+                                  deployer.shared_data_dir};
+      for (const auto& root : roots) {
+        if (root.empty()) {
+          continue;
+        }
+        auto relative_file =
+            std::filesystem::absolute(file_path).lexically_relative(
+                std::filesystem::absolute(root));
+        if (relative_file.empty()) {
+          continue;
+        }
+        auto relative_file_text = relative_file.generic_u8string();
+        if (relative_file_text == ".." ||
+            relative_file_text.rfind("../", 0) == 0) {
+          continue;
+        }
+        if (auto resolved = resolve_under_root(root, relative_file);
+            !resolved.empty()) {
+          return resolved;
+        }
+      }
+      return file_path;
+    }
+    if (auto resolved = resolve_under_root(deployer.user_data_dir, file_path);
+        !resolved.empty()) {
+      return resolved;
+    }
+    if (auto resolved = resolve_under_root(deployer.shared_data_dir, file_path);
+        !resolved.empty()) {
+      return resolved;
+    }
+    return deployer.user_data_dir / file_path;
+  }
+
+  static an<ReverseDb> new_ReverseDb(const std::string &file) {
+    return New<ReverseDb>(resolve_existing_path(file));
   }
 
   static string get_shared_data_dir() {
@@ -1318,7 +1467,7 @@ namespace ConfigReg {
   int raw_make(lua_State *L) {
     an<T> config = New<T>();
     if (auto cstr = lua_tostring(L, 1)) {
-      config->LoadFromFile(COMPAT<Deployer>::to_path(cstr));
+      config->LoadFromFile(COMPAT<Deployer>::resolve_existing_path(cstr));
     }
     LuaType<an<T>>::pushdata(L, config);
     return 1;
@@ -1383,7 +1532,7 @@ namespace ConfigReg {
   }
 
   bool load_from_file(T &t, const string &f) {
-    return t.LoadFromFile(COMPAT<Deployer>::to_path(f));
+    return t.LoadFromFile(COMPAT<Deployer>::resolve_existing_path(f));
   }
   bool save_to_file(T &t, const string &f) {
     return t.SaveToFile(COMPAT<Deployer>::to_path(f));
